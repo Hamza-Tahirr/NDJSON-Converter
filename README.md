@@ -1,147 +1,97 @@
-# NDJSON-Converter
- This application converts flat text data files into NDJSON (Newline Delimited JSON) format using predefined column specifications from CSV files. The application reads specification files from the `specs/` directory and data files from the `data/` directory, then writes the output in the `output/` directory. 
+# NDJSON Converter
 
-# Data File Converter to NDJSON
+A small Python command-line tool that converts fixed-width text files into NDJSON (newline-delimited JSON). A CSV spec for each file format gives the name, width and data type of every column. The tool uses it to slice each line into typed fields and writes one JSON object per line.
 
-## Overview
+## Features
 
-This application converts flat text data files into NDJSON (Newline Delimited JSON) format using predefined column specifications from CSV files. The application reads specification files from the `specs/` directory and data files from the `data/` directory, then writes the output in the `output/` directory.
+- Parses fixed-width text files column by column, using a CSV specification
+- Converts values to JSON types: `TEXT` to string, `BOOLEAN` (`0`/`1`) to `true`/`false`, `INTEGER` to number (negative values supported)
+- Matches each data file to its spec by file name, so several formats can be processed in one run
+- Checks the spec file (header, widths, data types) before processing starts
+- Reports bad lines with their line number and continues with the rest of the file
+- Skips a data file if its spec is missing or invalid, and ignores empty lines
 
-## Problem Definition
+## Tech stack
 
-You have two types of files:
-1. **Specification Files**: Describe the structure of the data files. These are located in the `specs/` directory and have a `.csv` extension. They specify:
-   - Column name
-   - Column width (in characters)
-   - Data type (STRING, BOOLEAN, INTEGER)
-   
-2. **Data Files**: Contain the raw data that need to be parsed and converted. These are located in the `data/` directory and have a `.txt` extension. Each data file corresponds to a specification file, which determines how the data should be parsed.
+- Python 3 (standard library only: `csv`, `json`, `os`)
 
-The application processes each data file using its associated specification file and generates an NDJSON file for each data file. Each line in the NDJSON file represents a JSON object.
+## Project structure
 
-### Example:
-#### Specification file (`specs/testformat1.csv`):
-| column name | width | datatype |
-|-------------|-------|----------|
-| name        | 10    | TEXT     |
-| valid       | 1     | BOOLEAN  |
-| count       | 3     | INTEGER  |
+```
+NDJSON-Converter/
+├── converter.py        # the converter
+├── specs/              # format specifications (.csv)
+│   └── testformat1.csv
+├── data/               # input files (.txt)
+│   └── testformat1_2021-07-06.txt
+└── output/             # converted files (.ndjson)
+    └── testformat1_2021-07-06.ndjson
+```
 
-#### Data file (`data/testformat1_2021-07-06.txt`):
-```bash
+## How it works
+
+Each data file in `data/` is named `<format>_<anything>.txt`. The part before the first underscore selects the spec file `specs/<format>.csv`. The result is written to `output/` with the same base name and a `.ndjson` extension.
+
+A spec file must have exactly this header:
+
+```
+column name,width,datatype
+```
+
+Every following row describes one column, in the order the columns appear in the line. Values are trimmed of surrounding spaces before conversion.
+
+### Example
+
+`specs/testformat1.csv`
+
+```
+column name,width,datatype
+name,10,TEXT
+valid,1,BOOLEAN
+count,3,INTEGER
+```
+
+`data/testformat1_2021-07-06.txt`
+
+```
 Diabetes  1  1
 Asthma    0-14
 Stroke    1122
 ```
 
-#### Output file (`output/testformat1_2021-07-06.ndjson`):
-```bash
+`output/testformat1_2021-07-06.ndjson`
+
+```
 {"name": "Diabetes", "valid": true, "count": 1}
 {"name": "Asthma", "valid": false, "count": -14}
 {"name": "Stroke", "valid": true, "count": 122}
 ```
 
+In the first line, `name` is the first 10 characters (`Diabetes  `), `valid` is the next character (`1`) and `count` is the last 3 characters (`  1`).
 
-## Directory Structure
-```bash
-NDJSON-Converter/
-│
-├── data/               # Directory containing data files (.txt)
-│   └── testformat1_2021-07-06.txt
-│
-├── specs/              # Directory containing specification files (.csv)
-│   └── testformat1.csv
-│
-├── output/             # Directory for output NDJSON files (.ndjson)
-│   └── (generated files will go here)
-│
-├               # Directory containing source code
-├── converter.py    # Python script with main code logic
-│
-└── README.md           # Documentation file explaining the project
+## Setup and usage
 
-```
-
-## Setup and Usage
-
-### Prerequisites
-
-- Python 3.12
-- Ensure you have imported the required modules:
+Requirements: Python 3.8 or newer. There are no third-party packages to install.
 
 ```bash
-import csv
-import json
-import os
+git clone https://github.com/Hamza-Tahirr/NDJSON-Converter.git
+cd NDJSON-Converter
+python converter.py
 ```
 
-## Running the Application
+To convert your own files:
 
-1. Place your specification files in the `specs/` directory.
+1. Add a spec file to `specs/`, for example `specs/myformat.csv`.
+2. Add one or more data files to `data/`, for example `data/myformat_2024-01-01.txt`.
+3. Run `python converter.py`. The converted files appear in `output/`.
 
-2. Place your data files in the `data/` directory.
+The `specs/`, `data/` and `output/` folders are found relative to `converter.py`, so the script can be run from any directory. Existing output files with the same name are overwritten.
 
-3. Run the converter from the root directory:
+## Error handling
 
-   ```bash
-     python converter.py
-   ```
+- Missing spec file, or a spec with a wrong header, an incomplete row, an invalid width or an unknown data type: the error is printed and that data file is skipped.
+- A line that ends before one of its columns starts, has a `BOOLEAN` value other than `0`/`1`, or has an `INTEGER` field that is not a number: the error is printed with the line number, the line is skipped, and processing continues.
 
-4. Output files will be generated in the `output/` directory.
+## License
 
-## Example Workflow
-
-1. Data File: `data/testformat1_2021-07-06.txt`
-2. Specification File: `specs/testformat1.csv`
-3. Generated NDJSON: `output/testformat1_2021-07-06.ndjson`
-
-## Error Handling
-
-1. The program handles missing or malformed files gracefully:
-   - If the specification file is missing, the program will print an error and skip processing the data file.
-   - If the data file is missing, an appropriate error will be logged.
-   - Any malformed data line will log an error and skip that line, but the rest of the file will continue processing.
-
-## Code Explanation
-
-`converter.py`
-
-The code processes each data file according to its specification:
-
-1. Specification Parsing: Reads the `specs/` CSV files to get the column definitions (name, width, datatype).
-2. Data Parsing: Reads the `data/` text files and slices each line based on the column widths defined in the specification file.
-3. Type Conversion: Converts text into JSON-compatible types (`TEXT`, `BOOLEAN`, `INTEGER`).
-4. NDJSON Output: Each parsed line from the data file is converted into a JSON object and written as a line in the NDJSON output file.
-   
-## Main Functions:
-
-1. `read_specification(spec_file)`: Reads and validates the specification file from `specs/`.
-2. `parse_line(line, columns)`: Parses a single line of the data file using the specification.
-3. `process_data_file(data_file, spec_file)`: Orchestrates reading the data and writing the output.
-4. `main()`: Loops through the files in `data/` and processes each file.
-
-## Unit Tests (Discussion)
-
-Although unit tests are not required, here’s an overview of the tests we would add:
-
-1. Test for Specification Parsing:
-   Ensure the `read_specification` function correctly parses the CSV and handles missing or incorrect columns.
-2. Test for Data Parsing:
-   Verify that `parse_line` correctly slices the line, handles different data types (e.g., `TEXT`, `BOOLEAN`, `INTEGER`), and handles errors (such as malformed lines).
-3. Test for End-to-End Processing:
-   Simulate processing a file pair (data + specification) and ensure the correct `NDJSON` output is generated.
-4. Edge Cases:
-   Test with files that are too short, have incorrect values (e.g., `BOOLEAN` not being `0` or `1`), or other unexpected issues.
-
-## Extensions and Improvements (Discussion Points)
-
-1. Unit Testing Framework: We could integrate `unittest` or `pytest` for automated testing.
-2. Logging: Implement a logging system to log errors into a file for better traceability.
-3. CLI Integration: Allow the program to accept custom input/output directories from the command line.
-4. Error Handling Improvements: Additional handling for more specific edge cases (e.g., partially corrupt files).
-   
-## Conclusion
-
-This project demonstrates how to read and process data files based on flexible specifications, converting them to NDJSON format. The approach ensures robustness, handles errors gracefully, and is easy to extend for future requirements.
-
-You can add a `requirements.txt` in the root directory for future purposes.
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
